@@ -3,80 +3,120 @@ from pypdf import PdfReader, PdfWriter
 from reportlab.pdfgen import canvas
 from reportlab.lib.utils import ImageReader
 import io
-from datetime import datetime
 
-st.set_page_config(page_title="Hospital Document Stamper", layout="centered", page_icon="🏥")
+st.set_page_config(page_title="Manipal Hospitals - PDF Tools", layout="centered", page_icon="🏥")
 
-st.title("🏥 Hospital Document Stamping Tool")
-st.write("Upload a scanned or digital PDF to automatically apply your hospital logo/stamp and timestamp.")
+st.title("🏥 Manipal Hospitals - PDF Operations Tool")
+st.write("A 2-in-1 tool to **Stamp PDF Documents** and **Merge Multiple PDFs** seamlessly.")
 
-st.info("💡 **Note:** You can use your hospital logo image right now for testing. Once the official stamp is approved, simply upload the new stamp image here!")
+tab1, tab2 = st.tabs(["📌 PDF Stamper", "🔗 PDF Merger"])
 
-# 1. File Uploaders
-col1, col2 = st.columns(2)
+# ---------------------------------------------------------
+# TAB 1: PDF STAMPER
+# ---------------------------------------------------------
+with tab1:
+    st.subheader("Document Stamping")
+    st.write("Upload a PDF document and a stamp image to apply the official Manipal Hospitals stamp.")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        uploaded_pdf = st.file_uploader("1. Upload PDF Document", type=["pdf"], key="stamp_pdf")
+    with col2:
+        uploaded_stamp = st.file_uploader("2. Upload Stamp / Logo (PNG/JPG)", type=["png", "jpg", "jpeg"], key="stamp_img")
 
-with col1:
-    uploaded_pdf = st.file_uploader("1. Upload PDF Document", type=["pdf"])
+    if uploaded_stamp:
+        st.image(uploaded_stamp, caption="Selected Stamp Preview", width=120)
 
-with col2:
-    uploaded_stamp = st.file_uploader("2. Upload Hospital Logo / Stamp (PNG/JPG)", type=["png", "jpg", "jpeg"])
+    position = st.selectbox("Select Stamp Position on PDF", ["Bottom Right", "Top Right", "Bottom Left", "Top Left"], key="stamp_pos")
 
-# 2. Options & Preview
-if uploaded_stamp:
-    st.image(uploaded_stamp, caption="Selected Logo/Stamp Preview", width=120)
+    if uploaded_pdf and uploaded_stamp:
+        if st.button("🚀 Apply Stamp & Generate PDF", use_container_width=True, key="stamp_btn"):
+            try:
+                reader = PdfReader(uploaded_pdf)
+                writer = PdfWriter()
 
-position = st.selectbox("Select Stamp Position on PDF", ["Bottom Right", "Top Right", "Bottom Left", "Top Left"])
+                # Coordinates for standard letter/A4 (~ 612 x 792 pt)
+                coords = {
+                    "Bottom Right": (430, 40),
+                    "Top Right": (430, 680),
+                    "Bottom Left": (40, 40),
+                    "Top Left": (40, 680)
+                }
+                x, y = coords[position]
 
-if uploaded_pdf and uploaded_stamp:
-    if st.button("🚀 Apply Stamp & Generate PDF", use_container_width=True):
-        try:
-            reader = PdfReader(uploaded_pdf)
-            writer = PdfWriter()
+                # Build Stamp Overlay Canvas (Only Stamp Image, No Timestamp)
+                packet = io.BytesIO()
+                can = canvas.Canvas(packet, pagesize=(612, 792))
 
-            # Coordinates for standard letter/A4 (~ 612 x 792 pt)
-            coords = {
-                "Bottom Right": (430, 40),
-                "Top Right": (430, 680),
-                "Bottom Left": (40, 40),
-                "Top Left": (40, 680)
-            }
-            x, y = coords[position]
+                # Draw Stamp Image
+                stamp_img = ImageReader(io.BytesIO(uploaded_stamp.getvalue()))
+                can.drawImage(stamp_img, x, y, width=130, height=60, mask='auto', preserveAspectRatio=True)
 
-            # Build Stamp Overlay Canvas
-            packet = io.BytesIO()
-            can = canvas.Canvas(packet, pagesize=(612, 792))
+                can.save()
+                packet.seek(0)
 
-            # FIX: Wrap BytesIO stream in ImageReader
-            stamp_img = ImageReader(io.BytesIO(uploaded_stamp.getvalue()))
-            can.drawImage(stamp_img, x, y, width=130, height=60, mask='auto', preserveAspectRatio=True)
+                overlay = PdfReader(packet).pages[0]
 
-            # Add Live Timestamp Text
-            now_str = datetime.now().strftime("%d-%b-%Y %I:%M %p")
-            can.setFont("Helvetica-Bold", 8)
-            can.drawString(x, y - 10, f"STAMPED: {now_str}")
+                # Merge overlay onto all pages
+                for page in reader.pages:
+                    page.merge_page(overlay)
+                    writer.add_page(page)
 
-            can.save()
-            packet.seek(0)
+                output_stream = io.BytesIO()
+                writer.write(output_stream)
+                output_stream.seek(0)
 
-            overlay = PdfReader(packet).pages[0]
+                st.success("✅ PDF Stamped Successfully!")
+                st.download_button(
+                    label="⬇️ Download Stamped PDF",
+                    data=output_stream,
+                    file_name=f"Stamped_{uploaded_pdf.name}",
+                    mime="application/pdf",
+                    use_container_width=True,
+                    key="stamp_dl"
+                )
 
-            # Merge overlay onto all pages
-            for page in reader.pages:
-                page.merge_page(overlay)
-                writer.add_page(page)
+            except Exception as e:
+                st.error(f"Error processing PDF: {str(e)}")
 
-            output_stream = io.BytesIO()
-            writer.write(output_stream)
-            output_stream.seek(0)
+# ---------------------------------------------------------
+# TAB 2: PDF MERGER
+# ---------------------------------------------------------
+with tab2:
+    st.subheader("PDF Merger")
+    st.write("Upload multiple PDF files to combine them into a single document in sequence.")
 
-            st.success("✅ PDF Stamped Successfully!")
-            st.download_button(
-                label="⬇️ Download Stamped PDF",
-                data=output_stream,
-                file_name=f"Stamped_{uploaded_pdf.name}",
-                mime="application/pdf",
-                use_container_width=True
-            )
+    uploaded_pdfs = st.file_uploader("Upload PDFs to Merge", type=["pdf"], accept_multiple_files=True, key="merge_pdfs")
 
-        except Exception as e:
-            st.error(f"Error processing PDF: {str(e)}")
+    if uploaded_pdfs and len(uploaded_pdfs) > 1:
+        st.write(f"**Files selected to merge ({len(uploaded_pdfs)}):**")
+        for idx, pdf in enumerate(uploaded_pdfs, 1):
+            st.write(f"{idx}. {pdf.name}")
+
+        if st.button("🔗 Merge PDFs", use_container_width=True, key="merge_btn"):
+            try:
+                merger_writer = PdfWriter()
+
+                for pdf in uploaded_pdfs:
+                    pdf_reader = PdfReader(pdf)
+                    for page in pdf_reader.pages:
+                        merger_writer.add_page(page)
+
+                merged_output = io.BytesIO()
+                merger_writer.write(merged_output)
+                merged_output.seek(0)
+
+                st.success("✅ PDFs Merged Successfully!")
+                st.download_button(
+                    label="⬇️ Download Merged PDF",
+                    data=output_stream if 'output_stream' in locals() else merged_output,
+                    file_name="Manipal_Merged_Document.pdf",
+                    mime="application/pdf",
+                    use_container_width=True,
+                    key="merge_dl"
+                )
+
+            except Exception as e:
+                st.error(f"Error merging PDFs: {str(e)}")
+    elif uploaded_pdfs and len(uploaded_pdfs) == 1:
+        st.info("Please upload at least 2 PDF files to merge.")
