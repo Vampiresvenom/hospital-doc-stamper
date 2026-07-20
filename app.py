@@ -1,13 +1,14 @@
 import streamlit as st
 from pypdf import PdfReader, PdfWriter
 from reportlab.pdfgen import canvas
+from reportlab.lib.utils import ImageReader
 import io
 from datetime import datetime
 
 st.set_page_config(page_title="Hospital Document Stamper", layout="centered", page_icon="🏥")
 
 st.title("🏥 Hospital Document Stamping Tool")
-st.write("Upload a scanned or digital PDF to automatically apply your hospital logo/stamp and dynamic timestamp.")
+st.write("Upload a scanned or digital PDF to automatically apply your hospital logo/stamp and timestamp.")
 
 st.info("💡 **Note:** You can use your hospital logo image right now for testing. Once the official stamp is approved, simply upload the new stamp image here!")
 
@@ -45,9 +46,9 @@ if uploaded_pdf and uploaded_stamp:
             packet = io.BytesIO()
             can = canvas.Canvas(packet, pagesize=(612, 792))
 
-            # Draw Logo/Stamp Image
-            stamp_bytes = io.BytesIO(uploaded_stamp.getvalue())
-            can.drawImage(stamp_bytes, x, y, width=130, height=60, mask='auto', preserveAspectRatio=True)
+            # FIX: Wrap BytesIO stream in ImageReader
+            stamp_img = ImageReader(io.BytesIO(uploaded_stamp.getvalue()))
+            can.drawImage(stamp_img, x, y, width=130, height=60, mask='auto', preserveAspectRatio=True)
 
             # Add Live Timestamp Text
             now_str = datetime.now().strftime("%d-%b-%Y %I:%M %p")
