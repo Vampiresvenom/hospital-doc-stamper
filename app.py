@@ -25,9 +25,13 @@ with tab1:
         uploaded_stamp = st.file_uploader("2. Upload Stamp / Logo (PNG/JPG)", type=["png", "jpg", "jpeg"], key="stamp_img")
 
     if uploaded_stamp:
-        st.image(uploaded_stamp, caption="Selected Stamp Preview", width=120)
+        st.image(uploaded_stamp, caption="Selected Stamp Preview", width=160)
 
     position = st.selectbox("Select Stamp Position on PDF", ["Bottom Right", "Top Right", "Bottom Left", "Top Left"], key="stamp_pos")
+
+    # Stamp dimensions (Increased size)
+    stamp_width = 220
+    stamp_height = 100
 
     if uploaded_pdf and uploaded_stamp:
         if st.button("🚀 Apply Stamp & Generate PDF", use_container_width=True, key="stamp_btn"):
@@ -35,22 +39,22 @@ with tab1:
                 reader = PdfReader(uploaded_pdf)
                 writer = PdfWriter()
 
-                # Coordinates for standard letter/A4 (~ 612 x 792 pt)
+                # Adjusted coordinates for standard letter/A4 (~ 612 x 792 pt) with larger stamp
                 coords = {
-                    "Bottom Right": (430, 40),
-                    "Top Right": (430, 680),
-                    "Bottom Left": (40, 40),
-                    "Top Left": (40, 680)
+                    "Bottom Right": (360, 30),
+                    "Top Right": (360, 660),
+                    "Bottom Left": (30, 30),
+                    "Top Left": (30, 660)
                 }
                 x, y = coords[position]
 
-                # Build Stamp Overlay Canvas (Only Stamp Image, No Timestamp)
+                # Build Stamp Overlay Canvas
                 packet = io.BytesIO()
                 can = canvas.Canvas(packet, pagesize=(612, 792))
 
-                # Draw Stamp Image
+                # Draw Larger Stamp Image
                 stamp_img = ImageReader(io.BytesIO(uploaded_stamp.getvalue()))
-                can.drawImage(stamp_img, x, y, width=130, height=60, mask='auto', preserveAspectRatio=True)
+                can.drawImage(stamp_img, x, y, width=stamp_width, height=stamp_height, mask='auto', preserveAspectRatio=True)
 
                 can.save()
                 packet.seek(0)
@@ -109,7 +113,7 @@ with tab2:
                 st.success("✅ PDFs Merged Successfully!")
                 st.download_button(
                     label="⬇️ Download Merged PDF",
-                    data=output_stream if 'output_stream' in locals() else merged_output,
+                    data=merged_output,
                     file_name="Manipal_Merged_Document.pdf",
                     mime="application/pdf",
                     use_container_width=True,
