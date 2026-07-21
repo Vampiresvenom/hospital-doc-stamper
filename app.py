@@ -34,13 +34,16 @@ def compress_pdf_under_2mb(input_bytes, max_mb=2.0):
     if len(output.getvalue()) <= max_bytes:
         return output.getvalue(), "Lossless Compression"
     
-    # Pass 2: Adaptive Compression if Pass 1 is still > 2 MB
+    # Pass 2: Adaptive Compression (Page must be added to writer FIRST)
     quality = 75
     while quality >= 25:
         writer_img = PdfWriter()
         for page in reader.pages:
-            page.compress_content_streams()
-            for img_obj in page.images:
+            new_page = writer_img.add_page(page)  # FIX: Add page to writer FIRST
+            new_page.compress_content_streams()
+            
+            # Now modify images on the newly added writer page
+            for img_obj in new_page.images:
                 try:
                     img = Image.open(io.BytesIO(img_obj.data))
                     if img.mode != 'RGB':
@@ -50,7 +53,6 @@ def compress_pdf_under_2mb(input_bytes, max_mb=2.0):
                     img_obj.replace(img_byte_arr.getvalue())
                 except Exception:
                     pass
-            writer_img.add_page(page)
         
         out_img = io.BytesIO()
         writer_img.write(out_img)
