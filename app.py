@@ -3,67 +3,33 @@ from pypdf import PdfReader, PdfWriter
 from reportlab.pdfgen import canvas
 from reportlab.lib.utils import ImageReader
 import io
-from PIL import Image
 
 st.set_page_config(page_title="Manipal Hospitals - PDF Tools", layout="centered", page_icon="🏥")
 
 st.title("🏥 Manipal Hospitals - PDF Operations Tool")
-st.write("A 3-in-1 tool to **Stamp PDF Documents**, **Merge PDFs**, and **Auto-Compress Files under 2 MB** seamlessly.")
+st.write("A 3-in-1 tool to **Stamp PDF Documents**, **Merge PDFs**, and **Compress PDF File Sizes** safely.")
 
 tab1, tab2, tab3 = st.tabs(["📌 PDF Stamper", "🔗 PDF Merger", "🗜️ PDF Compressor"])
 
 # ---------------------------------------------------------
-# HELPER: Target Size Compressor (Forces under 2 MB)
+# HELPER: Safe PDF Compression Engine
 # ---------------------------------------------------------
-def compress_pdf_under_2mb(input_bytes, max_mb=2.0):
-    max_bytes = max_mb * 1024 * 1024
+def compress_pdf_safe(input_bytes):
     reader = PdfReader(io.BytesIO(input_bytes))
-    
-    # Pass 1: Lossless Stream Compression
     writer = PdfWriter()
+
+    # Apply stream compression on every page cleanly
     for page in reader.pages:
         page.compress_content_streams()
         writer.add_page(page)
+
+    # Clean redundant metadata & duplicates
     writer.add_metadata({})
     
     output = io.BytesIO()
     writer.write(output)
     output.seek(0)
-    
-    # If already under 2 MB, return losslessly compressed version
-    if len(output.getvalue()) <= max_bytes:
-        return output.getvalue(), "Lossless Compression"
-    
-    # Pass 2: Adaptive Compression (Page must be added to writer FIRST)
-    quality = 75
-    while quality >= 25:
-        writer_img = PdfWriter()
-        for page in reader.pages:
-            new_page = writer_img.add_page(page)  # FIX: Add page to writer FIRST
-            new_page.compress_content_streams()
-            
-            # Now modify images on the newly added writer page
-            for img_obj in new_page.images:
-                try:
-                    img = Image.open(io.BytesIO(img_obj.data))
-                    if img.mode != 'RGB':
-                        img = img.convert('RGB')
-                    img_byte_arr = io.BytesIO()
-                    img.save(img_byte_arr, format='JPEG', quality=quality, optimize=True)
-                    img_obj.replace(img_byte_arr.getvalue())
-                except Exception:
-                    pass
-        
-        out_img = io.BytesIO()
-        writer_img.write(out_img)
-        out_img.seek(0)
-        
-        if len(out_img.getvalue()) <= max_bytes or quality == 25:
-            return out_img.getvalue(), f"Smart Compression (Quality: {quality}%)"
-            
-        quality -= 15
-        
-    return output.getvalue(), "Maximum Reduction Reached"
+    return output.getvalue()
 
 # ---------------------------------------------------------
 # TAB 1: PDF STAMPER
@@ -82,7 +48,7 @@ with tab1:
         st.image(uploaded_stamp, caption="Selected Stamp Preview", width=160)
 
     position = st.selectbox("Select Stamp Position on PDF", ["Bottom Right", "Top Right", "Bottom Left", "Top Left"], key="stamp_pos")
-    auto_2mb_stamp = st.checkbox("⚡ Auto-compress output file under 2 MB (TPA Upload Ready)", value=True, key="stamp_2mb_check")
+    auto_compress_stamp = st.checkbox("🗜️ Enable Auto-Compression (Optimizes output file size)", value=True, key="stamp_compress_check")
 
     stamp_width = 220
     stamp_height = 100
@@ -116,6 +82,8 @@ with tab1:
                 # Merge overlay onto all pages
                 for page in reader.pages:
                     page.merge_page(overlay)
+                    if auto_compress_stamp:
+                        page.compress_content_streams()
                     writer.add_page(page)
 
                 output_stream = io.BytesIO()
@@ -123,20 +91,14 @@ with tab1:
                 output_stream.seek(0)
                 
                 final_bytes = output_stream.getvalue()
-                method_used = "Standard"
-
-                if auto_2mb_stamp and len(final_bytes) > 2 * 1024 * 1024:
-                    final_bytes, method_used = compress_pdf_under_2mb(final_bytes, max_mb=2.0)
+                if auto_compress_stamp:
+                    final_bytes = compress_pdf_safe(final_bytes)
 
                 orig_size = len(uploaded_pdf.getvalue()) / (1024 * 1024)
                 final_size = len(final_bytes) / (1024 * 1024)
 
                 st.success("✅ PDF Stamped Successfully!")
-                
-                if final_size <= 2.0:
-                    st.info(f"🎯 **File Size Target Met:** `{final_size:.2f} MB` (Under 2 MB Limit) | Mode: `{method_used}`")
-                else:
-                    st.warning(f"⚠️ **Final Size:** `{final_size:.2f} MB` (Original: `{orig_size:.2f} MB`)")
+                st.info(f"📊 **File Size:** `{final_size:.2f} MB` (Original: `{orig_size:.2f} MB`)")
 
                 st.download_button(
                     label="⬇️ Download Stamped PDF",
@@ -158,7 +120,7 @@ with tab2:
     st.write("Upload multiple PDF files to combine them into a single document in sequence.")
 
     uploaded_pdfs = st.file_uploader("Upload PDFs to Merge", type=["pdf"], accept_multiple_files=True, key="merge_pdfs")
-    auto_2mb_merge = st.checkbox("⚡ Auto-compress merged output under 2 MB (TPA Upload Ready)", value=True, key="merge_2mb_check")
+    auto_compress_merge = st.checkbox("🗜️ Auto-compress merged output", value=True, key="merge_compress_check")
 
     if uploaded_pdfs and len(uploaded_pdfs) > 1:
         st.write(f"**Files selected to merge ({len(uploaded_pdfs)}):**")
@@ -172,6 +134,8 @@ with tab2:
                 for pdf in uploaded_pdfs:
                     pdf_reader = PdfReader(pdf)
                     for page in pdf_reader.pages:
+                        if auto_compress_merge:
+                            page.compress_content_streams()
                         merger_writer.add_page(page)
 
                 merged_output = io.BytesIO()
@@ -179,18 +143,13 @@ with tab2:
                 merged_output.seek(0)
 
                 final_bytes = merged_output.getvalue()
-                method_used = "Standard"
-
-                if auto_2mb_merge and len(final_bytes) > 2 * 1024 * 1024:
-                    final_bytes, method_used = compress_pdf_under_2mb(final_bytes, max_mb=2.0)
+                if auto_compress_merge:
+                    final_bytes = compress_pdf_safe(final_bytes)
 
                 final_size = len(final_bytes) / (1024 * 1024)
 
                 st.success("✅ PDFs Merged Successfully!")
-                if final_size <= 2.0:
-                    st.info(f"🎯 **File Size Target Met:** `{final_size:.2f} MB` (Under 2 MB Limit) | Mode: `{method_used}`")
-                else:
-                    st.warning(f"⚠️ **Final Size:** `{final_size:.2f} MB`")
+                st.info(f"📊 **Final Size:** `{final_size:.2f} MB`")
 
                 st.download_button(
                     label="⬇️ Download Merged PDF",
@@ -207,11 +166,11 @@ with tab2:
         st.info("Please upload at least 2 PDF files to merge.")
 
 # ---------------------------------------------------------
-# TAB 3: STANDALONE PDF COMPRESSOR (TARGET < 2 MB)
+# TAB 3: STANDALONE PDF COMPRESSOR
 # ---------------------------------------------------------
 with tab3:
-    st.subheader("Auto PDF Compressor (Target: < 2 MB)")
-    st.write("Upload any heavy PDF file (claims, medical records, invoices) to compress it under 2 MB.")
+    st.subheader("PDF Compressor")
+    st.write("Upload any heavy PDF file to compress its streams and remove redundant metadata without quality loss.")
 
     compress_file = st.file_uploader("Upload Heavy PDF to Compress", type=["pdf"], key="comp_only_pdf")
 
@@ -219,18 +178,14 @@ with tab3:
         orig_mb = len(compress_file.getvalue()) / (1024 * 1024)
         st.info(f"📁 **Original File Size:** `{orig_mb:.2f} MB`")
 
-        if st.button("🗜️ Compress Under 2 MB Now", use_container_width=True, key="comp_btn"):
+        if st.button("🗜️ Compress PDF Now", use_container_width=True, key="comp_btn"):
             try:
-                compressed_bytes, method = compress_pdf_under_2mb(compress_file.getvalue(), max_mb=2.0)
+                compressed_bytes = compress_pdf_safe(compress_file.getvalue())
                 new_mb = len(compressed_bytes) / (1024 * 1024)
                 savings = max(0, ((orig_mb - new_mb) / orig_mb) * 100) if orig_mb > 0 else 0
 
                 st.success(f"✅ PDF Compression Complete! Reduced by **{savings:.1f}%**")
-                
-                if new_mb <= 2.0:
-                    st.info(f"🎯 **Target Met:** `{new_mb:.2f} MB` (Successfully compressed under 2.0 MB threshold)")
-                else:
-                    st.warning(f"📉 **Compressed Size:** `{new_mb:.2f} MB` (Maximum safe compression reached)")
+                st.info(f"📉 **New Size:** `{new_mb:.2f} MB` (Original was `{orig_mb:.2f} MB`)")
 
                 st.download_button(
                     label="⬇️ Download Compressed PDF",
