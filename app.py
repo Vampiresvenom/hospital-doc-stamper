@@ -12,20 +12,23 @@ st.write("A 3-in-1 tool to **Stamp PDF Documents**, **Merge PDFs**, and **Compre
 tab1, tab2, tab3 = st.tabs(["📌 PDF Stamper", "🔗 PDF Merger", "🗜️ PDF Compressor"])
 
 # ---------------------------------------------------------
-# HELPER: Safe PDF Compression Engine
+# HELPER: Ultra-Safe Stream Compression Engine
 # ---------------------------------------------------------
-def compress_pdf_safe(input_bytes):
+def safe_compress_pdf(input_bytes):
     reader = PdfReader(io.BytesIO(input_bytes))
     writer = PdfWriter()
 
-    # Apply stream compression on every page cleanly
+    # 1. First add all pages to writer
     for page in reader.pages:
-        page.compress_content_streams()
         writer.add_page(page)
 
-    # Clean redundant metadata & duplicates
-    writer.add_metadata({})
-    
+    # 2. Compress streams on writer pages cleanly
+    for page in writer.pages:
+        try:
+            page.compress_content_streams()
+        except Exception:
+            pass  # Fallback gracefully if a specific page stream is already compressed/encrypted
+
     output = io.BytesIO()
     writer.write(output)
     output.seek(0)
@@ -82,8 +85,6 @@ with tab1:
                 # Merge overlay onto all pages
                 for page in reader.pages:
                     page.merge_page(overlay)
-                    if auto_compress_stamp:
-                        page.compress_content_streams()
                     writer.add_page(page)
 
                 output_stream = io.BytesIO()
@@ -91,8 +92,9 @@ with tab1:
                 output_stream.seek(0)
                 
                 final_bytes = output_stream.getvalue()
+                
                 if auto_compress_stamp:
-                    final_bytes = compress_pdf_safe(final_bytes)
+                    final_bytes = safe_compress_pdf(final_bytes)
 
                 orig_size = len(uploaded_pdf.getvalue()) / (1024 * 1024)
                 final_size = len(final_bytes) / (1024 * 1024)
@@ -134,8 +136,6 @@ with tab2:
                 for pdf in uploaded_pdfs:
                     pdf_reader = PdfReader(pdf)
                     for page in pdf_reader.pages:
-                        if auto_compress_merge:
-                            page.compress_content_streams()
                         merger_writer.add_page(page)
 
                 merged_output = io.BytesIO()
@@ -143,8 +143,9 @@ with tab2:
                 merged_output.seek(0)
 
                 final_bytes = merged_output.getvalue()
+                
                 if auto_compress_merge:
-                    final_bytes = compress_pdf_safe(final_bytes)
+                    final_bytes = safe_compress_pdf(final_bytes)
 
                 final_size = len(final_bytes) / (1024 * 1024)
 
@@ -180,7 +181,7 @@ with tab3:
 
         if st.button("🗜️ Compress PDF Now", use_container_width=True, key="comp_btn"):
             try:
-                compressed_bytes = compress_pdf_safe(compress_file.getvalue())
+                compressed_bytes = safe_compress_pdf(compress_file.getvalue())
                 new_mb = len(compressed_bytes) / (1024 * 1024)
                 savings = max(0, ((orig_mb - new_mb) / orig_mb) * 100) if orig_mb > 0 else 0
 
