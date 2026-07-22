@@ -7,9 +7,9 @@ import io
 st.set_page_config(page_title="Manipal Hospitals - PDF Tools", layout="centered", page_icon="🏥")
 
 st.title("🏥 Manipal Hospitals - PDF Operations Tool")
-st.write("A 4-in-1 suite for **Batch Stamping & Merging**, **Letterhead Overlay**, **PDF Merging**, and **Compressing**.")
+st.write("A 4-in-1 suite for **Batch Stamping & Merging**, **Batch Letterhead Printing**, **PDF Merging**, and **Compressing**.")
 
-tab1, tab2, tab3, tab4 = st.tabs(["📌 Batch Stamp & Merge", "📄 Letterhead Overlay", "🔗 PDF Merger", "🗜️ PDF Compressor"])
+tab1, tab2, tab3, tab4 = st.tabs(["📌 Batch Stamp & Merge", "📄 Batch Letterhead Print", "🔗 PDF Merger", "🗜️ PDF Compressor"])
 
 # ---------------------------------------------------------
 # TAB 1: BATCH STAMPER & SIMULTANEOUS MERGER
@@ -42,7 +42,6 @@ with tab1:
                 try:
                     stamp_bytes = uploaded_stamp.getvalue()
 
-                    # Build overlay canvas
                     packet = io.BytesIO()
                     can = canvas.Canvas(packet, pagesize=(612, 792))
                     stamp_img = ImageReader(io.BytesIO(stamp_bytes))
@@ -62,7 +61,6 @@ with tab1:
                     overlay = PdfReader(packet).pages[0]
                     merged_writer = PdfWriter()
 
-                    # Loop through each PDF file: stamp every page and merge into single output
                     for pdf_file in uploaded_pdfs:
                         reader = PdfReader(io.BytesIO(pdf_file.getvalue()))
                         for page in reader.pages:
@@ -91,50 +89,58 @@ with tab1:
                     st.error(f"Error batch processing PDFs: {str(e)}")
 
 # ---------------------------------------------------------
-# TAB 2: LETTERHEAD OVERLAY
+# TAB 2: BATCH LETTERHEAD OVERLAY & MERGE
 # ---------------------------------------------------------
 with tab2:
-    st.subheader("Letterhead Document Print")
-    st.write("Overlay plain document content onto an official Manipal Hospitals Letterhead template PDF.")
+    st.subheader("Batch Letterhead Document Print & Merge")
+    st.write("Upload a **Letterhead Template PDF** and **multiple Content PDFs**. The tool will apply the letterhead background to every file and combine them into a single merged document!")
 
     col1, col2 = st.columns(2)
     with col1:
         letterhead_pdf = st.file_uploader("1. Upload Letterhead Template (PDF)", type=["pdf"], key="lh_template")
     with col2:
-        content_pdf = st.file_uploader("2. Upload Content PDF", type=["pdf"], key="lh_content")
+        content_pdfs = st.file_uploader("2. Upload Multiple Content PDFs", type=["pdf"], accept_multiple_files=True, key="lh_contents")
 
-    if letterhead_pdf and content_pdf:
-        if st.button("📄 Apply Content to Letterhead", use_container_width=True, key="lh_btn"):
-            with st.spinner("Processing document onto letterhead..."):
+    if letterhead_pdf and content_pdfs:
+        st.write(f"📁 **Selected {len(content_pdfs)} content file(s) to process on letterhead:**")
+        for idx, f in enumerate(content_pdfs, 1):
+            st.caption(f"{idx}. {f.name}")
+
+        if st.button("📄 Apply Letterhead to All Files & Merge", use_container_width=True, key="batch_lh_btn"):
+            with st.spinner("Applying letterhead background and merging files..."):
                 try:
                     letterhead_bytes = letterhead_pdf.getvalue()
-                    content_bytes = content_pdf.getvalue()
+                    merged_writer = PdfWriter()
 
-                    content_reader = PdfReader(io.BytesIO(content_bytes))
-                    writer = PdfWriter()
-
-                    for content_page in content_reader.pages:
-                        bg_reader = PdfReader(io.BytesIO(letterhead_bytes))
-                        bg_page = bg_reader.pages[0]
-                        bg_page.merge_page(content_page)
-                        writer.add_page(bg_page)
+                    # Process each uploaded content document
+                    for content_file in content_pdfs:
+                        content_reader = PdfReader(io.BytesIO(content_file.getvalue()))
+                        for content_page in content_reader.pages:
+                            bg_reader = PdfReader(io.BytesIO(letterhead_bytes))
+                            bg_page = bg_reader.pages[0]
+                            bg_page.merge_page(content_page)
+                            merged_writer.add_page(bg_page)
 
                     lh_output = io.BytesIO()
-                    writer.write(lh_output)
+                    merged_writer.write(lh_output)
                     lh_output.seek(0)
 
-                    st.success("✅ Document Printed onto Letterhead Successfully!")
+                    final_size = len(lh_output.getvalue()) / (1024 * 1024)
+
+                    st.success(f"✅ Successfully applied letterhead to all {len(content_pdfs)} file(s) and merged them into 1 document!")
+                    st.info(f"📊 **Final File Size:** `{final_size:.2f} MB`")
+
                     st.download_button(
-                        label="⬇️ Download Letterhead PDF",
+                        label="⬇️ Download Letterhead Merged PDF",
                         data=lh_output.getvalue(),
-                        file_name=f"Letterhead_{content_pdf.name}",
+                        file_name="Letterhead_Merged_Document.pdf",
                         mime="application/pdf",
                         use_container_width=True,
                         key="lh_dl"
                     )
 
                 except Exception as e:
-                    st.error(f"Error merging with Letterhead: {str(e)}")
+                    st.error(f"Error merging files with Letterhead: {str(e)}")
 
 # ---------------------------------------------------------
 # TAB 3: PDF MERGER
