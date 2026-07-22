@@ -35,7 +35,10 @@ with tab1:
     if uploaded_pdf and uploaded_stamp:
         if st.button("🚀 Apply Stamp & Generate PDF", use_container_width=True, key="stamp_btn"):
             try:
-                reader = PdfReader(uploaded_pdf)
+                pdf_bytes = uploaded_pdf.getvalue()
+                stamp_bytes = uploaded_stamp.getvalue()
+
+                reader = PdfReader(io.BytesIO(pdf_bytes))
                 writer = PdfWriter()
 
                 coords = {
@@ -46,10 +49,9 @@ with tab1:
                 }
                 x, y = coords[position]
 
-                # Draw Overlay Stamp
                 packet = io.BytesIO()
                 can = canvas.Canvas(packet, pagesize=(612, 792))
-                stamp_img = ImageReader(io.BytesIO(uploaded_stamp.getvalue()))
+                stamp_img = ImageReader(io.BytesIO(stamp_bytes))
                 can.drawImage(stamp_img, x, y, width=stamp_width, height=stamp_height, mask='auto', preserveAspectRatio=True)
                 can.save()
                 packet.seek(0)
@@ -63,11 +65,11 @@ with tab1:
                 output_stream = io.BytesIO()
                 writer.write(output_stream)
                 output_stream.seek(0)
-                
+
                 st.success("✅ PDF Stamped Successfully!")
                 st.download_button(
                     label="⬇️ Download Stamped PDF",
-                    data=output_stream,
+                    data=output_stream.getvalue(),
                     file_name=f"Stamped_{uploaded_pdf.name}",
                     mime="application/pdf",
                     use_container_width=True,
@@ -78,7 +80,7 @@ with tab1:
                 st.error(f"Error processing PDF: {str(e)}")
 
 # ---------------------------------------------------------
-# TAB 2: LETTERHEAD OVERLAY (OPTIMIZED & FAST)
+# TAB 2: LETTERHEAD OVERLAY
 # ---------------------------------------------------------
 with tab2:
     st.subheader("Letterhead Document Print")
@@ -92,33 +94,36 @@ with tab2:
 
     if letterhead_pdf and content_pdf:
         if st.button("📄 Apply Content to Letterhead", use_container_width=True, key="lh_btn"):
-            try:
-                content_reader = PdfReader(content_pdf)
-                writer = PdfWriter()
+            with st.spinner("Processing document onto letterhead..."):
+                try:
+                    letterhead_bytes = letterhead_pdf.getvalue()
+                    content_bytes = content_pdf.getvalue()
 
-                # Process page by page without loading entire stream into memory loops
-                for page in content_reader.pages:
-                    bg_reader = PdfReader(letterhead_pdf)
-                    bg_page = bg_reader.pages[0]
-                    bg_page.merge_page(page)
-                    writer.add_page(bg_page)
+                    content_reader = PdfReader(io.BytesIO(content_bytes))
+                    writer = PdfWriter()
 
-                lh_output = io.BytesIO()
-                writer.write(lh_output)
-                lh_output.seek(0)
+                    for content_page in content_reader.pages:
+                        bg_reader = PdfReader(io.BytesIO(letterhead_bytes))
+                        bg_page = bg_reader.pages[0]
+                        bg_page.merge_page(content_page)
+                        writer.add_page(bg_page)
 
-                st.success("✅ Document Printed onto Letterhead Successfully!")
-                st.download_button(
-                    label="⬇️ Download Letterhead PDF",
-                    data=lh_output,
-                    file_name=f"Letterhead_{content_pdf.name}",
-                    mime="application/pdf",
-                    use_container_width=True,
-                    key="lh_dl"
-                )
+                    lh_output = io.BytesIO()
+                    writer.write(lh_output)
+                    lh_output.seek(0)
 
-            except Exception as e:
-                st.error(f"Error merging with Letterhead: {str(e)}")
+                    st.success("✅ Document Printed onto Letterhead Successfully!")
+                    st.download_button(
+                        label="⬇️ Download Letterhead PDF",
+                        data=lh_output.getvalue(),
+                        file_name=f"Letterhead_{content_pdf.name}",
+                        mime="application/pdf",
+                        use_container_width=True,
+                        key="lh_dl"
+                    )
+
+                except Exception as e:
+                    st.error(f"Error merging with Letterhead: {str(e)}")
 
 # ---------------------------------------------------------
 # TAB 3: PDF MERGER
@@ -139,7 +144,7 @@ with tab3:
                 merger_writer = PdfWriter()
 
                 for pdf in uploaded_pdfs:
-                    pdf_reader = PdfReader(pdf)
+                    pdf_reader = PdfReader(io.BytesIO(pdf.getvalue()))
                     for page in pdf_reader.pages:
                         merger_writer.add_page(page)
 
@@ -150,7 +155,7 @@ with tab3:
                 st.success("✅ PDFs Merged Successfully!")
                 st.download_button(
                     label="⬇️ Download Merged PDF",
-                    data=merged_output,
+                    data=merged_output.getvalue(),
                     file_name="Manipal_Merged_Document.pdf",
                     mime="application/pdf",
                     use_container_width=True,
@@ -177,7 +182,7 @@ with tab4:
 
         if st.button("🗜️ Compress PDF Now", use_container_width=True, key="comp_btn"):
             try:
-                reader = PdfReader(compress_file)
+                reader = PdfReader(io.BytesIO(compress_file.getvalue()))
                 writer = PdfWriter()
 
                 for page in reader.pages:
@@ -201,7 +206,7 @@ with tab4:
 
                 st.download_button(
                     label="⬇️ Download Compressed PDF",
-                    data=output,
+                    data=output.getvalue(),
                     file_name=f"Compressed_{compress_file.name}",
                     mime="application/pdf",
                     use_container_width=True,
