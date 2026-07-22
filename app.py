@@ -12,27 +12,6 @@ st.write("A 4-in-1 suite for **Stamping**, **Merging**, **Compressing**, and **A
 tab1, tab2, tab3, tab4 = st.tabs(["📌 PDF Stamper", "📄 Letterhead Overlay", "🔗 PDF Merger", "🗜️ PDF Compressor"])
 
 # ---------------------------------------------------------
-# HELPER: Ultra-Safe Stream Compression Engine
-# ---------------------------------------------------------
-def safe_compress_pdf(input_bytes):
-    reader = PdfReader(io.BytesIO(input_bytes))
-    writer = PdfWriter()
-
-    for page in reader.pages:
-        writer.add_page(page)
-
-    for page in writer.pages:
-        try:
-            page.compress_content_streams()
-        except Exception:
-            pass
-
-    output = io.BytesIO()
-    writer.write(output)
-    output.seek(0)
-    return output.getvalue()
-
-# ---------------------------------------------------------
 # TAB 1: PDF STAMPER
 # ---------------------------------------------------------
 with tab1:
@@ -49,7 +28,6 @@ with tab1:
         st.image(uploaded_stamp, caption="Selected Stamp Preview", width=160)
 
     position = st.selectbox("Select Stamp Position on PDF", ["Bottom Right", "Top Right", "Bottom Left", "Top Left"], key="stamp_pos")
-    auto_compress_stamp = st.checkbox("🗜️ Enable Auto-Compression (Optimizes output file size)", value=True, key="stamp_compress_check")
 
     stamp_width = 220
     stamp_height = 100
@@ -68,12 +46,11 @@ with tab1:
                 }
                 x, y = coords[position]
 
+                # Draw Overlay Stamp
                 packet = io.BytesIO()
                 can = canvas.Canvas(packet, pagesize=(612, 792))
-
                 stamp_img = ImageReader(io.BytesIO(uploaded_stamp.getvalue()))
                 can.drawImage(stamp_img, x, y, width=stamp_width, height=stamp_height, mask='auto', preserveAspectRatio=True)
-
                 can.save()
                 packet.seek(0)
 
@@ -87,19 +64,10 @@ with tab1:
                 writer.write(output_stream)
                 output_stream.seek(0)
                 
-                final_bytes = output_stream.getvalue()
-                if auto_compress_stamp:
-                    final_bytes = safe_compress_pdf(final_bytes)
-
-                orig_size = len(uploaded_pdf.getvalue()) / (1024 * 1024)
-                final_size = len(final_bytes) / (1024 * 1024)
-
                 st.success("✅ PDF Stamped Successfully!")
-                st.info(f"📊 **File Size:** `{final_size:.2f} MB` (Original: `{orig_size:.2f} MB`)")
-
                 st.download_button(
                     label="⬇️ Download Stamped PDF",
-                    data=final_bytes,
+                    data=output_stream,
                     file_name=f"Stamped_{uploaded_pdf.name}",
                     mime="application/pdf",
                     use_container_width=True,
@@ -110,7 +78,7 @@ with tab1:
                 st.error(f"Error processing PDF: {str(e)}")
 
 # ---------------------------------------------------------
-# TAB 2: LETTERHEAD OVERLAY (NEW FEATURE)
+# TAB 2: LETTERHEAD OVERLAY (OPTIMIZED & FAST)
 # ---------------------------------------------------------
 with tab2:
     st.subheader("Letterhead Document Print")
@@ -122,41 +90,27 @@ with tab2:
     with col2:
         content_pdf = st.file_uploader("2. Upload Content PDF", type=["pdf"], key="lh_content")
 
-    auto_compress_lh = st.checkbox("🗜️ Auto-compress letterhead output", value=True, key="lh_compress_check")
-
     if letterhead_pdf and content_pdf:
         if st.button("📄 Apply Content to Letterhead", use_container_width=True, key="lh_btn"):
             try:
-                lh_reader = PdfReader(letterhead_pdf)
                 content_reader = PdfReader(content_pdf)
                 writer = PdfWriter()
 
-                # Take page 1 of letterhead as standard background template
-                lh_bg = lh_reader.pages[0]
-
-                # Merge each content page over the letterhead background
-                for content_page in content_reader.pages:
-                    # Create a clone copy of letterhead background for this page
-                    bg_copy = PdfReader(letterhead_pdf).pages[0]
-                    bg_copy.merge_page(content_page)
-                    writer.add_page(bg_copy)
+                # Process page by page without loading entire stream into memory loops
+                for page in content_reader.pages:
+                    bg_reader = PdfReader(letterhead_pdf)
+                    bg_page = bg_reader.pages[0]
+                    bg_page.merge_page(page)
+                    writer.add_page(bg_page)
 
                 lh_output = io.BytesIO()
                 writer.write(lh_output)
                 lh_output.seek(0)
 
-                final_bytes = lh_output.getvalue()
-                if auto_compress_lh:
-                    final_bytes = safe_compress_pdf(final_bytes)
-
-                final_size = len(final_bytes) / (1024 * 1024)
-
                 st.success("✅ Document Printed onto Letterhead Successfully!")
-                st.info(f"📊 **Final File Size:** `{final_size:.2f} MB`")
-
                 st.download_button(
                     label="⬇️ Download Letterhead PDF",
-                    data=final_bytes,
+                    data=lh_output,
                     file_name=f"Letterhead_{content_pdf.name}",
                     mime="application/pdf",
                     use_container_width=True,
@@ -174,7 +128,6 @@ with tab3:
     st.write("Upload multiple PDF files to combine them into a single document in sequence.")
 
     uploaded_pdfs = st.file_uploader("Upload PDFs to Merge", type=["pdf"], accept_multiple_files=True, key="merge_pdfs")
-    auto_compress_merge = st.checkbox("🗜️ Auto-compress merged output", value=True, key="merge_compress_check")
 
     if uploaded_pdfs and len(uploaded_pdfs) > 1:
         st.write(f"**Files selected to merge ({len(uploaded_pdfs)}):**")
@@ -194,18 +147,10 @@ with tab3:
                 merger_writer.write(merged_output)
                 merged_output.seek(0)
 
-                final_bytes = merged_output.getvalue()
-                if auto_compress_merge:
-                    final_bytes = safe_compress_pdf(final_bytes)
-
-                final_size = len(final_bytes) / (1024 * 1024)
-
                 st.success("✅ PDFs Merged Successfully!")
-                st.info(f"📊 **Final Size:** `{final_size:.2f} MB`")
-
                 st.download_button(
                     label="⬇️ Download Merged PDF",
-                    data=final_bytes,
+                    data=merged_output,
                     file_name="Manipal_Merged_Document.pdf",
                     mime="application/pdf",
                     use_container_width=True,
@@ -222,7 +167,7 @@ with tab3:
 # ---------------------------------------------------------
 with tab4:
     st.subheader("PDF Compressor")
-    st.write("Upload any heavy PDF file to compress its streams and remove redundant metadata without quality loss.")
+    st.write("Upload any heavy PDF file to compress its content streams and optimize file size.")
 
     compress_file = st.file_uploader("Upload Heavy PDF to Compress", type=["pdf"], key="comp_only_pdf")
 
@@ -232,8 +177,23 @@ with tab4:
 
         if st.button("🗜️ Compress PDF Now", use_container_width=True, key="comp_btn"):
             try:
-                compressed_bytes = safe_compress_pdf(compress_file.getvalue())
-                new_mb = len(compressed_bytes) / (1024 * 1024)
+                reader = PdfReader(compress_file)
+                writer = PdfWriter()
+
+                for page in reader.pages:
+                    writer.add_page(page)
+
+                for page in writer.pages:
+                    try:
+                        page.compress_content_streams()
+                    except Exception:
+                        pass
+
+                output = io.BytesIO()
+                writer.write(output)
+                output.seek(0)
+
+                new_mb = len(output.getvalue()) / (1024 * 1024)
                 savings = max(0, ((orig_mb - new_mb) / orig_mb) * 100) if orig_mb > 0 else 0
 
                 st.success(f"✅ PDF Compression Complete! Reduced by **{savings:.1f}%**")
@@ -241,7 +201,7 @@ with tab4:
 
                 st.download_button(
                     label="⬇️ Download Compressed PDF",
-                    data=compressed_bytes,
+                    data=output,
                     file_name=f"Compressed_{compress_file.name}",
                     mime="application/pdf",
                     use_container_width=True,
