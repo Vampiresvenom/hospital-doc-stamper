@@ -7,9 +7,9 @@ import io
 st.set_page_config(page_title="Manipal Hospitals - PDF Tools", layout="centered", page_icon="🏥")
 
 st.title("🏥 Manipal Hospitals - PDF Operations Tool")
-st.write("A 3-in-1 tool to **Stamp PDF Documents**, **Merge PDFs**, and **Compress PDF File Sizes** safely.")
+st.write("A 4-in-1 suite for **Stamping**, **Merging**, **Compressing**, and **Applying Letterheads** to PDF documents.")
 
-tab1, tab2, tab3 = st.tabs(["📌 PDF Stamper", "🔗 PDF Merger", "🗜️ PDF Compressor"])
+tab1, tab2, tab3, tab4 = st.tabs(["📌 PDF Stamper", "📄 Letterhead Overlay", "🔗 PDF Merger", "🗜️ PDF Compressor"])
 
 # ---------------------------------------------------------
 # HELPER: Ultra-Safe Stream Compression Engine
@@ -18,16 +18,14 @@ def safe_compress_pdf(input_bytes):
     reader = PdfReader(io.BytesIO(input_bytes))
     writer = PdfWriter()
 
-    # 1. First add all pages to writer
     for page in reader.pages:
         writer.add_page(page)
 
-    # 2. Compress streams on writer pages cleanly
     for page in writer.pages:
         try:
             page.compress_content_streams()
         except Exception:
-            pass  # Fallback gracefully if a specific page stream is already compressed/encrypted
+            pass
 
     output = io.BytesIO()
     writer.write(output)
@@ -70,7 +68,6 @@ with tab1:
                 }
                 x, y = coords[position]
 
-                # Build Stamp Overlay Canvas
                 packet = io.BytesIO()
                 can = canvas.Canvas(packet, pagesize=(612, 792))
 
@@ -82,7 +79,6 @@ with tab1:
 
                 overlay = PdfReader(packet).pages[0]
 
-                # Merge overlay onto all pages
                 for page in reader.pages:
                     page.merge_page(overlay)
                     writer.add_page(page)
@@ -92,7 +88,6 @@ with tab1:
                 output_stream.seek(0)
                 
                 final_bytes = output_stream.getvalue()
-                
                 if auto_compress_stamp:
                     final_bytes = safe_compress_pdf(final_bytes)
 
@@ -115,9 +110,66 @@ with tab1:
                 st.error(f"Error processing PDF: {str(e)}")
 
 # ---------------------------------------------------------
-# TAB 2: PDF MERGER
+# TAB 2: LETTERHEAD OVERLAY (NEW FEATURE)
 # ---------------------------------------------------------
 with tab2:
+    st.subheader("Letterhead Document Print")
+    st.write("Overlay plain document content onto an official Manipal Hospitals Letterhead template PDF.")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        letterhead_pdf = st.file_uploader("1. Upload Letterhead Template (PDF)", type=["pdf"], key="lh_template")
+    with col2:
+        content_pdf = st.file_uploader("2. Upload Content PDF", type=["pdf"], key="lh_content")
+
+    auto_compress_lh = st.checkbox("🗜️ Auto-compress letterhead output", value=True, key="lh_compress_check")
+
+    if letterhead_pdf and content_pdf:
+        if st.button("📄 Apply Content to Letterhead", use_container_width=True, key="lh_btn"):
+            try:
+                lh_reader = PdfReader(letterhead_pdf)
+                content_reader = PdfReader(content_pdf)
+                writer = PdfWriter()
+
+                # Take page 1 of letterhead as standard background template
+                lh_bg = lh_reader.pages[0]
+
+                # Merge each content page over the letterhead background
+                for content_page in content_reader.pages:
+                    # Create a clone copy of letterhead background for this page
+                    bg_copy = PdfReader(letterhead_pdf).pages[0]
+                    bg_copy.merge_page(content_page)
+                    writer.add_page(bg_copy)
+
+                lh_output = io.BytesIO()
+                writer.write(lh_output)
+                lh_output.seek(0)
+
+                final_bytes = lh_output.getvalue()
+                if auto_compress_lh:
+                    final_bytes = safe_compress_pdf(final_bytes)
+
+                final_size = len(final_bytes) / (1024 * 1024)
+
+                st.success("✅ Document Printed onto Letterhead Successfully!")
+                st.info(f"📊 **Final File Size:** `{final_size:.2f} MB`")
+
+                st.download_button(
+                    label="⬇️ Download Letterhead PDF",
+                    data=final_bytes,
+                    file_name=f"Letterhead_{content_pdf.name}",
+                    mime="application/pdf",
+                    use_container_width=True,
+                    key="lh_dl"
+                )
+
+            except Exception as e:
+                st.error(f"Error merging with Letterhead: {str(e)}")
+
+# ---------------------------------------------------------
+# TAB 3: PDF MERGER
+# ---------------------------------------------------------
+with tab3:
     st.subheader("PDF Merger")
     st.write("Upload multiple PDF files to combine them into a single document in sequence.")
 
@@ -143,7 +195,6 @@ with tab2:
                 merged_output.seek(0)
 
                 final_bytes = merged_output.getvalue()
-                
                 if auto_compress_merge:
                     final_bytes = safe_compress_pdf(final_bytes)
 
@@ -167,9 +218,9 @@ with tab2:
         st.info("Please upload at least 2 PDF files to merge.")
 
 # ---------------------------------------------------------
-# TAB 3: STANDALONE PDF COMPRESSOR
+# TAB 4: STANDALONE PDF COMPRESSOR
 # ---------------------------------------------------------
-with tab3:
+with tab4:
     st.subheader("PDF Compressor")
     st.write("Upload any heavy PDF file to compress its streams and remove redundant metadata without quality loss.")
 
